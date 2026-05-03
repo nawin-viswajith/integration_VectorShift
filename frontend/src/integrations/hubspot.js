@@ -41,7 +41,15 @@ export const HubSpotIntegration = ({ user, org, integrationParams, setIntegratio
             const credentials = response.data;
             if (credentials) {
                 setIsConnected(true);
-                setIntegrationParams(prev => ({ ...prev, credentials, type: 'HubSpot' }));
+                setIntegrationParams(prev => ({
+                    ...prev,
+                    credentials: {
+                        ...credentials,
+                        user_id: user,
+                        org_id: org,
+                    },
+                    type: 'HubSpot',
+                }));
             }
         } catch (e) {
             alert(e?.response?.data?.detail);
@@ -52,12 +60,11 @@ export const HubSpotIntegration = ({ user, org, integrationParams, setIntegratio
 
     useEffect(() => {
         setIsConnected(integrationParams?.credentials ? true : false);
-    }, []);
+    }, [integrationParams?.credentials]);
 
     return (
         <>
         <Box sx={{mt: 2}}>
-            Parameters
             <Box display='flex' alignItems='center' justifyContent='center' sx={{mt: 2}}>
                 <Button
                     variant='contained'

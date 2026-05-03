@@ -1,6 +1,7 @@
 from collections import Counter
 from datetime import datetime, timezone
 import json
+from integrations.crypto_utils import decrypt_json_payload
 
 
 def _parse_iso(ts):
@@ -32,8 +33,8 @@ def generate_insights(items, integration_type):
         props = {}
         if (item or {}).get("delta"):
             try:
-                props = json.loads(item.get("delta") or "{}")
-            except json.JSONDecodeError:
+                props = decrypt_json_payload(item.get("delta") or "{}")
+            except Exception:
                 props = {}
 
         name = (item or {}).get("name")

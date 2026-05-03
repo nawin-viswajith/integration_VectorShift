@@ -11,12 +11,14 @@ import requests
 from dotenv import load_dotenv
 
 from integrations.integration_item import IntegrationItem
+from integrations.crypto_utils import encrypt_json_payload
 from redis_client import add_key_value_redis, delete_key_redis, get_value_redis
 
 load_dotenv()
 
 CLIENT_ID = os.getenv("HUBSPOT_CLIENT_ID", "XXX")
 CLIENT_SECRET = os.getenv("HUBSPOT_CLIENT_SECRET", "XXX")
+PII_SAFE_MODE = os.getenv("PII_SAFE_MODE", "false").lower() == "true"
 REDIRECT_URI = "http://localhost:8000/integrations/hubspot/oauth2callback"
 AUTHORIZATION_BASE_URL = "https://app.hubspot.com/oauth/authorize"
 TOKEN_URL = "https://api.hubapi.com/oauth/v1/token"
@@ -40,6 +42,23 @@ def _build_item_name(response_json, object_type):
     if object_type == "deal":
         return properties.get("dealname") or f"Deal {response_json.get('id')}"
     return f"{object_type.capitalize()} {response_json.get('id')}"
+
+
+def _mask_value(value, visible=3):
+    if not value:
+        return value
+    value = str(value)
+    if len(value) <= visible:
+        return "*" * len(value)
+    return value[:visible] + "*" * (len(value) - visible)
+
+
+def _mask_properties(properties: dict) -> dict:
+    masked = dict(properties or {})
+    for key in ("email", "domain", "firstname", "lastname", "dealname", "name"):
+        if key in masked and masked[key]:
+            masked[key] = _mask_value(masked[key])
+    return masked
 
 
 async def authorize_hubspot(user_id, org_id):
@@ -124,30 +143,54 @@ async def get_hubspot_credentials(user_id, org_id):
     if not credentials:
         raise HTTPException(status_code=400, detail="No credentials found.")
     await delete_key_redis(f"hubspot_credentials:{org_id}:{user_id}")
-    return json.loads(credentials)
+    connection_id = secrets.token_urlsafe(24)
+    await add_key_value_redis(
+        f"hubspot_session:{org_id}:{user_id}:{connection_id}",
+        credentials,
+        expire=3600,
+    )
+    return {
+        "connection_id": connection_id,
+        "credential_mode": "opaque_session",
+        "expires_in": 3600,
+    }
 
 
 def create_integration_item_metadata_object(response_json, object_type):
     properties = response_json.get("properties", {})
+    safe_props = _mask_properties(properties) if PII_SAFE_MODE else properties
     last_modified = (
-        properties.get("hs_lastmodifieddate")
-        or properties.get("lastmodifieddate")
+        safe_props.get("hs_lastmodifieddate")
+        or safe_props.get("lastmodifieddate")
         or response_json.get("updatedAt")
     )
+    name_response = dict(response_json)
+    name_response["properties"] = safe_props
     return IntegrationItem(
         id=f"{response_json.get('id')}_{object_type}",
         type=object_type,
-        name=_build_item_name(response_json, object_type),
-        creation_time=properties.get("createdate"),
+        name=_build_item_name(name_response, object_type),
+        creation_time=safe_props.get("createdate"),
         last_modified_time=last_modified,
         url=f"https://app.hubspot.com/contacts/{{portal_id}}/record/{object_type}/{response_json.get('id')}",
-        delta=json.dumps(properties),
+        delta=encrypt_json_payload(safe_props),
     )
 
 
 async def get_items_hubspot(credentials):
     credentials = json.loads(credentials)
     access_token = credentials.get("access_token")
+    if not access_token and credentials.get("connection_id"):
+        connection_id = credentials.get("connection_id")
+        user_id = credentials.get("user_id")
+        org_id = credentials.get("org_id")
+        if not connection_id or not user_id or not org_id:
+            raise HTTPException(status_code=400, detail="Missing connection context.")
+        stored_credentials = await get_value_redis(f"hubspot_session:{org_id}:{user_id}:{connection_id}")
+        if not stored_credentials:
+            raise HTTPException(status_code=400, detail="Session expired. Reconnect HubSpot.")
+        credentials = json.loads(stored_credentials)
+        access_token = credentials.get("access_token")
     if not access_token:
         raise HTTPException(status_code=400, detail="Missing access token.")
 

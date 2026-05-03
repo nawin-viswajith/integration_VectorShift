@@ -22,6 +22,7 @@ def publish_insights_to_notion(
     parent_page_id: str,
     integration_type: str,
     insights: dict,
+    llm_insight: dict | None = None,
 ):
     if not notion_access_token or not parent_page_id:
         raise HTTPException(status_code=400, detail="notion_access_token and parent_page_id are required.")
@@ -44,6 +45,14 @@ def publish_insights_to_notion(
     ]
     for idx, action in enumerate(recommended_actions[:10], start=1):
         children.append(_paragraph(f"{idx}. {action}"))
+
+    llm_text = (llm_insight or {}).get("insight", "")
+    if llm_text:
+        children.append(_paragraph("LLM Insights:"))
+        for line in str(llm_text).splitlines():
+            clean = line.strip()
+            if clean:
+                children.append(_paragraph(clean))
 
     payload = {
         "parent": {"page_id": parent_page_id},

@@ -1,12 +1,18 @@
 # VectorShift Integrations Technical Assessment
 
 ## Overview
-This project implements the required HubSpot OAuth integration and item loading flow using:
+This project completes the HubSpot OAuth + data loading assessment requirements and extends the product with an AI Insights workflow suitable for CRM Ops analysis and demo presentation.
+
+Stack:
 - Frontend: React + Material UI
 - Backend: FastAPI
-- State/Credentials cache: Redis
+- Cache/session/settings store: Redis
 
-In addition to the required scope, this repo includes an optional AI Insights dashboard that computes CRM health metrics, provides explainability, supports LLM-based recommendations, and can publish insight reports to Notion.
+Extended capabilities:
+- AI Insights dashboard with explainability and actionable recommendations
+- LLM insights generation with prompt customization
+- Notion publishing for stakeholder-ready reporting
+- PII safety and encryption controls for sensitive data handling
 
 ## What Is Implemented
 
@@ -34,6 +40,8 @@ In addition to the required scope, this repo includes an optional AI Insights da
   - publish dashboard summary/KPIs/actions to a Notion page
 - User settings persistence in Redis:
   - Notion token + parent page ID saved per `user_id` + `org_id`
+- Record explorer UI:
+  - filterable (contact/company/deal), paginated cards, modal detail view
 
 ## Run Locally
 Use 3 terminals.
@@ -70,6 +78,9 @@ HUBSPOT_CLIENT_ID=...
 HUBSPOT_CLIENT_SECRET=...
 HUBSPOT_PRIVATE_APP_TOKEN=...
 GEMINI_API_KEY=...
+PII_SAFE_MODE=false
+ENCRYPT_SENSITIVE_DATA=false
+ENCRYPTION_KEY=
 
 SEED_CONTACTS=100
 SEED_COMPANIES=40
@@ -80,6 +91,15 @@ Notes:
 - `HUBSPOT_CLIENT_ID/SECRET` are for OAuth app flow.
 - `HUBSPOT_PRIVATE_APP_TOKEN` is for bulk seeding script only.
 - `GEMINI_API_KEY` is optional; app falls back gracefully if missing.
+- `PII_SAFE_MODE=true` masks sensitive CRM fields in API responses and uses PII-minimized payloads for LLM prompts.
+- `ENCRYPT_SENSITIVE_DATA=true` enables AES-256-GCM encryption for sensitive JSON payloads (`delta` fields and saved settings in Redis).
+- `ENCRYPTION_KEY` must be a urlsafe base64-encoded 32-byte key.
+- `ENABLE_AI_INSIGHTS=true` (if present in your environment conventions) can be used to gate AI-only behavior in deployment.
+
+Generate an encryption key:
+```powershell
+python -c "import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
+```
 
 ## HubSpot OAuth App Scopes
 Required scopes should match install URL exactly:
@@ -87,6 +107,16 @@ Required scopes should match install URL exactly:
 - `crm.objects.contacts.read`
 - `crm.objects.companies.read`
 - `crm.objects.deals.read`
+
+## Security & Privacy Controls
+Implemented controls in this solution:
+- OAuth credentials are not exposed in frontend responses; backend stores session material in Redis and returns an opaque connection reference.
+- PII-safe mode (`PII_SAFE_MODE=true`) masks sensitive fields in loaded CRM records and minimizes sensitive payload passed to LLM analysis.
+- Application-level encryption (`ENCRYPT_SENSITIVE_DATA=true`) uses AES-256-GCM for sensitive server-side fields/settings.
+- Production guidance documented:
+  - HTTPS/TLS in deployment
+  - Redis at-rest encryption
+  - Managed key rotation (KMS) for encryption keys
 
 ## Seed Demo Data (Optional)
 ```powershell
@@ -115,14 +145,16 @@ Default creates:
 1. Connect HubSpot
 2. Load Data
 3. Generate ML Insights
-4. Click KPI tile to inspect explainability
-5. Add analyst prompt and generate LLM insights
-6. Save Notion settings
-7. Publish report to Notion
+4. Click KPI tiles to inspect explainability + significance
+5. Open LLM prompt panel, run default prompt, then a custom prompt
+6. Save Notion settings (token + parent page id)
+7. Publish report to Notion (includes LLM section when available)
+8. Open record explorer: filter by type + paginate + open record detail modal
 
 ## Current Limitations
 - HubSpot loader fetches one page per object (up to configured `limit`) and does not yet paginate through all `after` cursors.
 - Notion/Airtable base integrations from starter template may require real credentials for full operation.
+- This frontend is CRA-based; dependency stack shows legacy warnings from upstream CRA packages.
 
 ## Security Note
 If any token/secret was exposed during local testing, rotate it before final submission.

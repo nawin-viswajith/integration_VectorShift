@@ -8,6 +8,7 @@ load_dotenv()
 
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+PII_SAFE_MODE = os.getenv("PII_SAFE_MODE", "false").lower() == "true"
 GEMINI_MODEL = "gemini-2.5-flash-lite"
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
@@ -23,7 +24,19 @@ async def generate_llm_insights(integration_type: str, items, analyst_prompt: st
             ),
         }
 
-    sample = items[:20]
+    if PII_SAFE_MODE:
+        sample = [
+            {
+                "id": (item or {}).get("id"),
+                "type": (item or {}).get("type"),
+                "creation_time": (item or {}).get("creation_time"),
+                "last_modified_time": (item or {}).get("last_modified_time"),
+                "visibility": (item or {}).get("visibility"),
+            }
+            for item in items[:20]
+        ]
+    else:
+        sample = items[:20]
     analyst_section = f"\nAnalyst request: {analyst_prompt}\n" if analyst_prompt else ""
     prompt = (
         f"You are an analytics copilot for a no-code AI platform. "

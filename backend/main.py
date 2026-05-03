@@ -117,6 +117,7 @@ async def get_integration_llm_insights(
 async def publish_insights_report_to_notion(
     integration_type: str = Form(...),
     insights: str = Form(...),
+    llm_insight: str = Form(""),
     notion_access_token: str = Form(...),
     notion_parent_page_id: str = Form(...),
 ):
@@ -128,11 +129,19 @@ async def publish_insights_report_to_notion(
     if not isinstance(parsed_insights, dict):
         raise HTTPException(status_code=400, detail="insights must be an object.")
 
+    parsed_llm = {}
+    if llm_insight:
+        try:
+            parsed_llm = json.loads(llm_insight)
+        except json.JSONDecodeError:
+            parsed_llm = {"insight": llm_insight}
+
     return publish_insights_to_notion(
         notion_access_token=notion_access_token,
         parent_page_id=notion_parent_page_id,
         integration_type=integration_type,
         insights=parsed_insights,
+        llm_insight=parsed_llm,
     )
 
 
