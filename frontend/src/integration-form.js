@@ -3,6 +3,8 @@ import {
     Box,
     Autocomplete,
     TextField,
+    FormControlLabel,
+    Switch,
 } from '@mui/material';
 import { AirtableIntegration } from './integrations/airtable';
 import { HubSpotIntegration } from './integrations/hubspot';
@@ -20,10 +22,15 @@ export const IntegrationForm = () => {
     const [user, setUser] = useState('TestUser');
     const [org, setOrg] = useState('TestOrg');
     const [currType, setCurrType] = useState(null);
+    const [aiMode, setAiMode] = useState(false);
     const CurrIntegration = integrationMapping[currType];
 
   return (
-    <Box display='flex' justifyContent='center' alignItems='center' flexDirection='column' sx={{ width: '100%' }}>
+    <Box display='flex' justifyContent='center' alignItems='center' flexDirection='column' sx={{ width: '100%', pt: 2 }}>
+        <FormControlLabel
+            control={<Switch checked={aiMode} onChange={(e) => setAiMode(e.target.checked)} />}
+            label={aiMode ? 'AI Insights Dashboard: ON' : 'AI Insights Dashboard: OFF'}
+        />
         <Box display='flex' flexDirection='column'>
         <TextField
             label="User"
@@ -52,7 +59,13 @@ export const IntegrationForm = () => {
         }
         {integrationParams?.credentials && 
         <Box sx={{mt: 2}}>
-            <DataForm integrationType={integrationParams?.type} credentials={integrationParams?.credentials} />
+            <DataForm
+                integrationType={integrationParams?.type}
+                credentials={integrationParams?.credentials}
+                aiMode={aiMode}
+                user={user}
+                org={org}
+            />
         </Box>
         }
     </Box>

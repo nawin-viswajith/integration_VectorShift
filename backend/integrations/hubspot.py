@@ -8,9 +8,12 @@ from fastapi import HTTPException, Request
 from fastapi.responses import HTMLResponse
 import httpx
 import requests
+from dotenv import load_dotenv
 
 from integrations.integration_item import IntegrationItem
 from redis_client import add_key_value_redis, delete_key_redis, get_value_redis
+
+load_dotenv()
 
 CLIENT_ID = os.getenv("HUBSPOT_CLIENT_ID", "XXX")
 CLIENT_SECRET = os.getenv("HUBSPOT_CLIENT_SECRET", "XXX")
@@ -18,6 +21,7 @@ REDIRECT_URI = "http://localhost:8000/integrations/hubspot/oauth2callback"
 AUTHORIZATION_BASE_URL = "https://app.hubspot.com/oauth/authorize"
 TOKEN_URL = "https://api.hubapi.com/oauth/v1/token"
 SCOPES = [
+    "oauth",
     "crm.objects.contacts.read",
     "crm.objects.companies.read",
     "crm.objects.deals.read",
@@ -125,13 +129,19 @@ async def get_hubspot_credentials(user_id, org_id):
 
 def create_integration_item_metadata_object(response_json, object_type):
     properties = response_json.get("properties", {})
+    last_modified = (
+        properties.get("hs_lastmodifieddate")
+        or properties.get("lastmodifieddate")
+        or response_json.get("updatedAt")
+    )
     return IntegrationItem(
         id=f"{response_json.get('id')}_{object_type}",
         type=object_type,
         name=_build_item_name(response_json, object_type),
         creation_time=properties.get("createdate"),
-        last_modified_time=properties.get("hs_lastmodifieddate"),
+        last_modified_time=last_modified,
         url=f"https://app.hubspot.com/contacts/{{portal_id}}/record/{object_type}/{response_json.get('id')}",
+        delta=json.dumps(properties),
     )
 
 
@@ -143,9 +153,9 @@ async def get_items_hubspot(credentials):
 
     headers = {"Authorization": f"Bearer {access_token}"}
     endpoints = {
-        "contact": "https://api.hubapi.com/crm/v3/objects/contacts?limit=50&properties=firstname,lastname,email,createdate,hs_lastmodifieddate",
-        "company": "https://api.hubapi.com/crm/v3/objects/companies?limit=50&properties=name,domain,createdate,hs_lastmodifieddate",
-        "deal": "https://api.hubapi.com/crm/v3/objects/deals?limit=50&properties=dealname,createdate,hs_lastmodifieddate",
+        "contact": "https://api.hubapi.com/crm/v3/objects/contacts?limit=100&properties=firstname,lastname,email,createdate,lastmodifieddate,hs_lastmodifieddate,lifecyclestage",
+        "company": "https://api.hubapi.com/crm/v3/objects/companies?limit=100&properties=name,domain,createdate,lastmodifieddate,hs_lastmodifieddate,industry",
+        "deal": "https://api.hubapi.com/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,createdate,lastmodifieddate,hs_lastmodifieddate,pipeline",
     }
 
     list_of_integration_item_metadata = []
